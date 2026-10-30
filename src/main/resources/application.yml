@@ -1,0 +1,21 @@
+spring:
+  application:
+   name: immunization-api
+
+  datasource:
+   url: jdbc:postgresql://localhost:5432/immunization_db
+   username: user
+   password: password
+   driver-class-name: org.postgresql.Driver
+
+  jpa:
+   hibernate:
+     ddl-auto: validate
+
+  flyway:
+    enabled: true
+
+
+
+
+  
