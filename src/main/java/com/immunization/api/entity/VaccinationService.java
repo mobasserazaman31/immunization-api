@@ -7,10 +7,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Table;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity 
 @Table (name = "vaccination_services")
 @Getter 
+@NoArgsConstructor
 public class VaccinationService {
 
     @Id

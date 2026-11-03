@@ -2,6 +2,7 @@ package com.immunization.api.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import lombok.NoArgsConstructor;
 import jakarta.persistence.Id;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -18,6 +19,7 @@ import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "appointments")
+@NoArgsConstructor 
 public class Appointment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
