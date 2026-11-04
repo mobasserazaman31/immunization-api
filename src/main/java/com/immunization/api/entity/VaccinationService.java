@@ -25,16 +25,12 @@ public class VaccinationService {
     @Column(length = 500)
     private String description;
 
-    @Column(name = "duration_minutes", nullable = false)
-    private int durationMinutes;
-
     @Column(nullable = false)
     private boolean active = true;
 
-    VaccinationService(String name, String description, int durationMinutes, boolean active) {
+    VaccinationService(String name, String description, boolean active) {
         this.name = name;
         this.description = description;
-        this.durationMinutes = durationMinutes;
         this.active = active;
     }
 }

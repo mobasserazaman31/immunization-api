@@ -4,23 +4,23 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.immunization.api.dto.AppointmentSlotResponse;
-import com.immunization.api.service.AppointmentSlotService;
+import com.immunization.api.service.SlotService;
 
 import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-
+import com.immunization.api.entity.SlotTemplate;
 
 
 @RestController 
 @RequestMapping ("/api/appointment-slots")
 public class AppointmentSlotController {
 
-    private final AppointmentSlotService appointmentSlotService;
+    private final SlotService appointmentSlotService;
 
-    AppointmentSlotController(AppointmentSlotService appointmentSlotService){
+    AppointmentSlotController(SlotService appointmentSlotService){
         this.appointmentSlotService = appointmentSlotService;
     }
 
@@ -53,6 +53,11 @@ public class AppointmentSlotController {
             LocalDate.now(),
             LocalDate.now().plusDays(7)
         );
+    }
+
+    @GetMapping("/templates")
+    public List<SlotTemplate> getSlotTemplates(@RequestParam Long clinicId) {
+        return appointmentSlotService.getSlotTemplates(clinicId);
     }
     
     

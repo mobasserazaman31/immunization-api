@@ -21,6 +21,8 @@ import jakarta.persistence.ManyToOne;
 @NoArgsConstructor 
 public class AppointmentSlot {
 
+    public static final int DEFAULT_DURATION_MINUTES = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -33,16 +35,16 @@ public class AppointmentSlot {
     @Column(name = "start_time", nullable = false)
     private OffsetDateTime startTime;
 
-    @Column(name = "end_time", nullable = false)
-    private OffsetDateTime endTime;
-
     @Column(nullable = false)
     private boolean active = true;
 
-    AppointmentSlot(Clinic clinic, OffsetDateTime startTime, OffsetDateTime endTime, boolean active) {
+    public OffsetDateTime getEndTime() {
+        return startTime.plusMinutes(DEFAULT_DURATION_MINUTES);
+    }
+
+    AppointmentSlot(Clinic clinic, OffsetDateTime startTime, boolean active) {
         this.clinic = clinic;
         this.startTime = startTime;
-        this.endTime = endTime;
         this.active = active;
     }
 }

@@ -7,4 +7,6 @@ import com.immunization.api.entity.Appointment;
 
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
+
+    int countByClinicIdAndStartTime(Long clinicId, java.time.LocalDateTime startTime);
 }

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Entity
 @Table(
@@ -14,6 +15,8 @@ import java.time.LocalDate;
 @Setter
 @NoArgsConstructor
 public class SlotOverride {
+
+    public static final int DEFAULT_DURATION_MINUTES = 30;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,9 +35,13 @@ public class SlotOverride {
     @Column (name = "start_time", nullable = false)
     private String startTime;
 
-    @Column (name = "end_time", nullable = false)
-    private String endTime;
+    @Column  (name = "reason", nullable = false)
+    private String reason;
 
-    // @Column  (name = "reason")
-    // private String reason;
+    @Column (name = "capacity", nullable = false)
+    private int capacity;
+
+    public String getEndTime() {
+        return LocalTime.parse(startTime).plusMinutes(DEFAULT_DURATION_MINUTES).toString();
+    }
 } 

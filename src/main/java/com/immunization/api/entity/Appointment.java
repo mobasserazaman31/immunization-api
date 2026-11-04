@@ -14,13 +14,19 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
 import java.util.UUID;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-
+import lombok.Getter;
 
 @Entity
 @Table(name = "appointments")
 @NoArgsConstructor 
+@Getter
+
 public class Appointment {
+
+    public static final int DEFAULT_DURATION_MINUTES = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -28,9 +34,12 @@ public class Appointment {
     @Column(name = "booking_reference", nullable = false, unique = true)
     private UUID bookingReference;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "slot_id", nullable = false)
-    private AppointmentSlot slot;
+    @ManyToOne (fetch = FetchType.LAZY)
+    @JoinColumn (name = "clinic_id", nullable = false)
+    private Clinic clinic;
+
+    @Column(name = "start_time", nullable = false)
+    private LocalDateTime startTime;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "service_id", nullable = false)
@@ -61,8 +70,13 @@ public class Appointment {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
+    public LocalDateTime getEndTime() {
+        return startTime.plusMinutes(DEFAULT_DURATION_MINUTES);
+    }
+
     public Appointment(
-            AppointmentSlot slot,
+            Clinic clinic,
+            LocalDateTime startTime,
             VaccinationService service,
             String patientFirstName,
             String patientLastName,
@@ -72,7 +86,8 @@ public class Appointment {
             String guardianPhone,
             AppointmentStatus status
     ) {
-        this.slot = slot;
+        this.clinic = clinic;
+        this.startTime = startTime;
         this.service = service;
         this.patientFirstName = patientFirstName;
         this.patientLastName = patientLastName;

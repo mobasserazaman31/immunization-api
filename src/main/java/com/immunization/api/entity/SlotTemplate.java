@@ -1,6 +1,7 @@
 package com.immunization.api.entity;
 
 import java.time.DayOfWeek;
+import java.time.LocalTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -43,6 +44,9 @@ public class SlotTemplate {
     @Column (name = "end_time", nullable = false)
     private String endTime;
 
+    @Column (name = "capacity", nullable = false)
+    private int capacity;
+
     private boolean active = true;
-    
+
 }
