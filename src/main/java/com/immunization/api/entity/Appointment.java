@@ -3,6 +3,7 @@ package com.immunization.api.entity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import jakarta.persistence.Id;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -22,7 +23,7 @@ import lombok.Getter;
 @Table(name = "appointments")
 @NoArgsConstructor 
 @Getter
-
+@Setter 
 public class Appointment {
 
     public static final int DEFAULT_DURATION_MINUTES = 30;

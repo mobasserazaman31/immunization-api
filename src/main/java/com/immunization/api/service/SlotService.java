@@ -20,14 +20,16 @@ public class SlotService {
     private final AppointmentRepository appointmentRepository;
     private final Logger logger = LoggerFactory.getLogger(SlotService.class);
 
-    public List<AppointmentSlotResponse> generateSlots(
+    public List<List<AppointmentSlotResponse>> generateSlots(
             Long clinicId,
             LocalDate startDate,
             LocalDate endDate) {
 
-        List<AppointmentSlotResponse> slots = new ArrayList<>();
+        Map<LocalDate, List<AppointmentSlotResponse>> slotsByDate = new LinkedHashMap<>();
 
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            List<AppointmentSlotResponse> dateSlots = new ArrayList<>();
+            slotsByDate.put(date, dateSlots);
 
             // 1. Check for date-specific override
             Optional<SlotOverride> override = overrideRepository.findByClinicIdAndOverrideDate(clinicId, date);
@@ -38,13 +40,14 @@ public class SlotService {
 
                 // Clinic closed on this date
                 if (exception.isClosed()) {
+                    slotsByDate.remove(date);
                     continue;
                 }
 
                 // Generate slots using override
                 generate(
                         clinicId,
-                        slots,
+                        dateSlots,
                         date,
                         exception.getStartTime(),
                         exception.getEndTime(),
@@ -59,20 +62,23 @@ public class SlotService {
 
                 logger.info("Template for clinicId: {}, date: {}, template: {}", clinicId, date, template != null ? "{" + template.getDayOfWeek() + "," + template.getStartTime() + "," + template.getEndTime() + "}" : "None");
 
-                
-                if (template != null)
+                if (template != null) {
                     generate(
                             clinicId,
-                            slots,
+                            dateSlots,
                             date,
                             template.getStartTime(),
                             template.getEndTime(),
                             template.getCapacity());
+                }
+            }
 
+            if (dateSlots.isEmpty()) {
+                slotsByDate.remove(date);
             }
         }
 
-        return slots;
+        return new ArrayList<>(slotsByDate.values());
     }
 
     private void generate(

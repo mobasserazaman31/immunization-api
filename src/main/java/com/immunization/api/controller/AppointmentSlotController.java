@@ -45,7 +45,7 @@ public class AppointmentSlotController {
     
 
     @GetMapping
-    public List<AppointmentSlotResponse> getSlots(
+    public List<List<AppointmentSlotResponse>> getSlots(
             @RequestParam Long clinicId) {
 
         return appointmentSlotService.generateSlots(

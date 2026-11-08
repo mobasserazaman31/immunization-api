@@ -4,9 +4,19 @@ import java.time.LocalDate;
 
 public record OverrideRequest(LocalDate date, Long clinicId, boolean closed, String startTime, String endTime) {
 
-    public OverrideRequest(Long clinicId, LocalDate date, boolean closed) {
-        this(date, clinicId, closed, "11:00", "16:00");
+
+    public OverrideRequest {
+        if (closed) {
+            if (startTime == null) startTime = "00:00";
+            if (endTime == null) endTime = "00:00";
+        }else{
+            if (startTime == null) startTime = "11:00";
+            if (endTime == null) endTime = "16:00";
+        }
+
     }
+
+    
 
 }
 

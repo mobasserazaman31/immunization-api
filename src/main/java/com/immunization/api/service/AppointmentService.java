@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
@@ -120,6 +121,20 @@ public class AppointmentService {
             throw new IllegalStateException("Requested slot is full");
         }
     }
+
+    public boolean cancelAppointment(UUID bookingReference, LocalDate dateOfBirth){
+
+        Optional<Appointment> appointmentOpt = appointmentRepository.findByBookingReferenceAndPatientDateOfBirth(bookingReference, dateOfBirth);
+        if (appointmentOpt.isPresent()) {
+            Appointment appointment = appointmentOpt.get();
+            appointment.setStatus(AppointmentStatus.CANCELLED);
+            appointmentRepository.save(appointment);
+            return true;
+        }
+        return false;
+
+    }
+
 
     public List<Appointment> getAllAppointments() {
         return appointmentRepository.findAll();
