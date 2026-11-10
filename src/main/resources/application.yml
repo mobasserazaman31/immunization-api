@@ -1,21 +1,36 @@
 spring:
   application:
-   name: immunization-api
+    name: immunization-api
 
   datasource:
-   url: jdbc:postgresql://localhost:5432/immunization_db
-   username: user
-   password: password
-   driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/immunization_db
+    username: user
+    password: password
+    driver-class-name: org.postgresql.Driver
 
   jpa:
-   hibernate:
-     ddl-auto: validate
+    hibernate:
+      ddl-auto: validate
 
   flyway:
     enabled: true
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8081/realms/immunization
+          jwk-set-uri: http://localhost:8081/realms/immunization/protocol/openid-connect/certs
 
+server:
+  port: 8080
 
-
+springdoc:
+  swagger-ui:
+    persist-authorization: false
+    oauth:
+      client-id: swagger-ui
+      use-pkce-with-authorization-code-grant: true
+      use-basic-authentication-with-access-code-grant: false
+    
   

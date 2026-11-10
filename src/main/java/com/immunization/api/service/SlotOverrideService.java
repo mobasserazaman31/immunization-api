@@ -28,6 +28,9 @@ public class SlotOverrideService {
         slotOverride.setOverrideDate(overrideRequest.date());
         slotOverride.setClosed(overrideRequest.closed());
         slotOverride.setStartTime(overrideRequest.startTime());
+        slotOverride.setEndTime(overrideRequest.endTime());
+        slotOverride.setReason(overrideRequest.reason());
+        slotOverride.setCapacity(overrideRequest.capacity());
         return slotOverrideRepository.save(slotOverride);
     }
 }

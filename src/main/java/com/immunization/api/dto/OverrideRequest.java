@@ -2,7 +2,14 @@ package com.immunization.api.dto;
 
 import java.time.LocalDate;
 
-public record OverrideRequest(LocalDate date, Long clinicId, boolean closed, String startTime, String endTime) {
+public record OverrideRequest(
+        LocalDate date,
+        Long clinicId,
+        boolean closed,
+        String startTime,
+        String endTime,
+        String reason,
+        Integer capacity) {
 
 
     public OverrideRequest {
@@ -13,7 +20,8 @@ public record OverrideRequest(LocalDate date, Long clinicId, boolean closed, Str
             if (startTime == null) startTime = "11:00";
             if (endTime == null) endTime = "16:00";
         }
-
+        if (reason == null) reason = "Closed for the day";
+        if (capacity == null) capacity = 1;
     }
 
     

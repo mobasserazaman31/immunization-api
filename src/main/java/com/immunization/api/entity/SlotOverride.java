@@ -35,13 +35,14 @@ public class SlotOverride {
     @Column (name = "start_time", nullable = false)
     private String startTime;
 
+    @Column (name = "end_time", nullable = false)
+    private String endTime;
+
     @Column  (name = "reason", nullable = false)
     private String reason;
 
     @Column (name = "capacity", nullable = false)
     private int capacity;
 
-    public String getEndTime() {
-        return LocalTime.parse(startTime).plusMinutes(DEFAULT_DURATION_MINUTES).toString();
-    }
+  
 } 
