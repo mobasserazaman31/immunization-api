@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.UUID;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,12 +36,10 @@ public class Appointment {
     @Column(name = "booking_reference", nullable = false, unique = true)
     private UUID bookingReference;
 
-    @ManyToOne (fetch = FetchType.LAZY)
-    @JoinColumn (name = "clinic_id", nullable = false)
-    private Clinic clinic;
-
-    @Column(name = "start_time", nullable = false)
-    private LocalDateTime startTime;
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "slot_id", nullable = false)
+    private Slot slot;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "service_id", nullable = false)
@@ -72,12 +71,19 @@ public class Appointment {
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
     public LocalDateTime getEndTime() {
-        return startTime.plusMinutes(DEFAULT_DURATION_MINUTES);
+        return getStartTime().plusMinutes(DEFAULT_DURATION_MINUTES);
+    }
+
+    public Clinic getClinic() {
+        return slot == null ? null : slot.getClinic();
+    }
+
+    public LocalDateTime getStartTime() {
+        return slot == null ? null : slot.getStartTime();
     }
 
     public Appointment(
-            Clinic clinic,
-            LocalDateTime startTime,
+            Slot slot,
             VaccinationService service,
             String patientFirstName,
             String patientLastName,
@@ -87,8 +93,7 @@ public class Appointment {
             String guardianPhone,
             AppointmentStatus status
     ) {
-        this.clinic = clinic;
-        this.startTime = startTime;
+        this.slot = slot;
         this.service = service;
         this.patientFirstName = patientFirstName;
         this.patientLastName = patientLastName;

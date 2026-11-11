@@ -2,24 +2,23 @@ package com.immunization.api.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.immunization.api.dto.AppointmentRequest;
 import com.immunization.api.entity.Appointment;
 import com.immunization.api.entity.AppointmentStatus;
-import com.immunization.api.entity.Clinic;
-import com.immunization.api.entity.SlotOverride;
-import com.immunization.api.entity.SlotTemplate;
+import com.immunization.api.entity.Slot;
+import com.immunization.api.entity.SlotStatus;
 import com.immunization.api.entity.VaccinationService;
 import com.immunization.api.repository.AppointmentRepository;
-import com.immunization.api.repository.ClinicRepository;
-import com.immunization.api.repository.SlotOverrideRepository;
-import com.immunization.api.repository.SlotTemplateRepository;
+import com.immunization.api.repository.SlotRepository;
 import com.immunization.api.repository.VaccinationServiceRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -28,27 +27,33 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor 
 public class AppointmentService {
 
-    private final ClinicRepository clinicRepository;
     private final VaccinationServiceRepository vaccinationServiceRepository;
     private final AppointmentRepository appointmentRepository;
-    private final SlotTemplateRepository slotTemplateRepository;
-    private final SlotOverrideRepository slotOverrideRepository;
+        private final SlotRepository slotRepository;
 
-
+        @Transactional
     public Appointment createAppointment(AppointmentRequest appointmentRequest) {
-
-        Clinic clinic = clinicRepository.findById(appointmentRequest.clinicId())
-                .orElseThrow(() -> new IllegalArgumentException("Clinic not found"));
-
         VaccinationService service = vaccinationServiceRepository.findById(appointmentRequest.serviceId())
                 .orElseThrow(() -> new IllegalArgumentException("Vaccination service not found"));
 
         LocalDateTime requestedStart = appointmentRequest.startTime();
-        validateSlotAvailability(clinic.getId(), requestedStart);
+        Slot slot = slotRepository.findForUpdate(appointmentRequest.clinicId(), requestedStart)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Requested slot is unavailable"));
+
+        if (!slot.isActive()
+            || slot.getStatus() != SlotStatus.AVAILABLE
+            || slot.getBookedCount() >= slot.getCapacity()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Requested slot is full or unavailable");
+        }
+
+        slot.setBookedCount(slot.getBookedCount() + 1);
+        slot.setStatus(slot.getBookedCount() == slot.getCapacity()
+            ? SlotStatus.BOOKED
+            : SlotStatus.AVAILABLE);
+        slotRepository.save(slot);
 
         Appointment appointment = new Appointment(
-                clinic,
-                requestedStart,
+            slot,
                 service,
                 appointmentRequest.patientFirstName(),
                 appointmentRequest.patientLastName(),
@@ -62,72 +67,26 @@ public class AppointmentService {
         return appointmentRepository.save(appointment);
     }
 
-    private void validateSlotAvailability(Long clinicId, LocalDateTime requestedStart) {
-        LocalDate requestedDate = requestedStart.toLocalDate();
-
-        SlotOverride override = slotOverrideRepository
-                .findByClinicIdAndOverrideDate(clinicId, requestedDate)
-                .orElse(null);
-
-        if (override != null && override.isClosed()) {
-            throw new IllegalArgumentException("Clinic is closed on the requested date");
-        }
-
-        LocalTime requestedTime = requestedStart.toLocalTime();
-        LocalTime slotStart;
-        LocalTime slotEnd;
-        int capacity;
-
-        if (override != null) {
-            slotStart = LocalTime.parse(override.getStartTime());
-            slotEnd = LocalTime.parse(override.getEndTime());
-            capacity = override.getCapacity();
-        } else {
-            SlotTemplate template = slotTemplateRepository
-                    .findByClinicIdAndDayOfWeekAndActiveTrue(clinicId, requestedDate.getDayOfWeek())
-                    .orElse(null);
-
-            if (template == null) {
-                throw new IllegalArgumentException("No time slot exists for this clinic and date");
-            }
-
-            slotStart = LocalTime.parse(template.getStartTime());
-            slotEnd = LocalTime.parse(template.getEndTime());
-            capacity = template.getCapacity();
-        }
-
-        if (!requestedTime.equals(slotStart) && !requestedTime.isAfter(slotStart) && !requestedTime.isBefore(slotStart)) {
-            // no-op check to keep logic explicit while preserving the range validation below
-        }
-
-        boolean matchesSlot = false;
-        LocalDateTime cursor = LocalDateTime.of(requestedDate, slotStart);
-        LocalDateTime closing = LocalDateTime.of(requestedDate, slotEnd);
-
-        while (!cursor.plusMinutes(30).isAfter(closing)) {
-            if (cursor.equals(requestedStart)) {
-                matchesSlot = true;
-                break;
-            }
-            cursor = cursor.plusMinutes(30);
-        }
-
-        if (!matchesSlot) {
-            throw new IllegalArgumentException("Requested time is not a valid slot for this clinic");
-        }
-
-        int bookedCount = appointmentRepository.countByClinicIdAndStartTime(clinicId, requestedStart);
-        if (bookedCount >= capacity) {
-            throw new IllegalStateException("Requested slot is full");
-        }
-    }
-
+    @Transactional
     public boolean cancelAppointment(UUID bookingReference, LocalDate dateOfBirth){
 
         Optional<Appointment> appointmentOpt = appointmentRepository.findByBookingReferenceAndPatientDateOfBirth(bookingReference, dateOfBirth);
         if (appointmentOpt.isPresent()) {
             Appointment appointment = appointmentOpt.get();
+            if (appointment.getStatus() != AppointmentStatus.BOOKED) {
+                return true;
+            }
+
+            Slot slot = slotRepository.findForUpdate(
+                            appointment.getClinic().getId(),
+                            appointment.getStartTime())
+                    .orElseThrow(() -> new IllegalStateException("Appointment slot not found"));
             appointment.setStatus(AppointmentStatus.CANCELLED);
+            slot.setBookedCount(Math.max(0, slot.getBookedCount() - 1));
+            slot.setStatus(slot.getBookedCount() >= slot.getCapacity()
+                    ? SlotStatus.BOOKED
+                    : SlotStatus.AVAILABLE);
+            slotRepository.save(slot);
             appointmentRepository.save(appointment);
             return true;
         }
