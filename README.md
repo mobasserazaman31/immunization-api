@@ -1,52 +1,91 @@
 # Immunization API
 
-## Scheduling model
+## Hybrid rolling-slot model: change list
 
-For this public immunization clinic system, the preferred approach is to generate slot availability on demand from recurring templates and date-specific overrides rather than storing a full slot table in the database.
+The app is moving toward a persisted, rolling window of concrete slots instead of calculating availability dynamically on each booking request. This is the recommended model for routine immunization and similar recurring schedules.
 
-### Why this approach is preferred
+### What still needs to change
 
-The scheduling rules are rule-based rather than slot-inventory-based:
+1. Make the startup job bootstrap-only
+   - The startup path should seed the initial rolling window once.
+   - It should not be used to re-generate the full future window repeatedly.
+   - The goal is:
+     - startup: seed the current window
+     - daily job: add only the next day
+     - no full-window rebuild during normal operation
 
-- clinics have recurring weekly templates
-- some dates are overridden by special rules
-- capacity is managed as a bucket per time slot
-- appointment availability is calculated from templates, overrides, and existing appointments
+2. Remove full-window regeneration from the normal flow
+   - Current generation entry points include:
+     - `populateRollingWindow()`
+     - `generateNewRollingDay()`
+     - `regenerateDate(...)`
+   - For production stability, keep only:
+     - initial bootstrap
+     - forward-only daily generation
+     - explicit admin-triggered single-date regeneration when required
 
-This matches the operational reality of a public clinic much better than creating and maintaining a large table of generated slot rows in advance.
+3. Treat templates and overrides as the source of truth, not the slot table
+   - Concrete slot rows should be materialized from:
+     - active clinic template
+     - valid date window
+     - override for that specific date
+   - The slot table should be the bookable inventory, not the place where the business rules are recalculated each time.
 
-### Current design
+4. Enforce `validFrom` and `validTill` as required business rules
+   - `validFrom` must not be null.
+   - `validTill` must not be null.
+   - `validTill` must be greater than or equal to `validFrom`.
+   - Templates outside their validity window should not generate slots.
 
-The system uses these sources of truth:
+5. Keep slot generation idempotent
+   - The app should not create duplicate slot rows for the same clinic, date, and time.
+   - The current insert-if-absent pattern is the right approach.
+   - Every generation path should go through the same slot creation logic to avoid overlap and duplication.
 
-- Clinic
-- VaccinationService
-- SlotTemplate
-- SlotOverride
-- Appointment
+6. Handle overrides explicitly
+   - For date-level overrides, the rules should be explicit:
+     - closed date => no slots generated
+     - reduced capacity => only that slot capacity changes
+     - changed time window => regenerate only that date
+   - Override logic must also reconcile bookings when capacity drops or the day is closed.
 
-Availability is computed as follows:
+7. Define the policy for removed or invalidated slots
+   - This remains a business decision.
+   - Options include:
+     - deactivate slot rows instead of deleting them
+     - delete slot rows and cancel associated booked appointments
+     - leave history but mark slots inactive
+   - The chosen policy should be deterministic and easy to support.
 
-1. Check for a date-specific override for the clinic.
-2. If no override exists, use the weekly template for that day.
-3. Build the candidate slot start times from the template or override window.
-4. Count existing appointments for each start time.
-5. Compare the count to the configured capacity.
-6. Only return available slots to the user.
+8. Keep booking logic based on slot stock
+   - Booking should rely on concrete slot capacity and booked count.
+   - It should not re-aggregate the template logic each time.
+   - This reduces race conditions and keeps availability aligned with the materialized data.
 
-### Why not persist every generated slot?
+9. Keep the daily job narrow and predictable
+   - Best pattern:
+     - bootstrap window = current date + 7 days
+     - daily job = generate exactly one new future date
+     - never regenerate the whole window unless an admin explicitly requests it
+   - This is the standard airline-style scheduling pattern: recurring template + materialized future dates.
 
-Persisting every slot in the database is useful only when the system needs:
+10. Add clear admin-only control for templates and overrides
+   - Template creation should require admin permissions.
+   - Override creation/update should also require admin control or explicit ownership rules.
+   - The API should clearly separate:
+     - public slot browsing
+     - authenticated booking
+     - admin schedule management
 
-- explicit per-slot records for reporting
-- manual slot administration
-- historical auditing of generated slots
-- a fixed calendar inventory that must be edited individually
+### Recommended final pattern
 
-This project does not currently require that complexity.
+The best model for routine immunization or airline-like scheduling is:
 
-### Decision
+- Templates define the recurring weekly pattern.
+- Validity windows restrict when the template is active.
+- Overrides change a specific date.
+- Concrete slot rows are generated and stored for a rolling future window.
+- A daily job extends the window by one more day.
+- Booking logic reads the persisted slot capacity, not the template.
 
-For a public immunization clinic with recurring schedules and capacity-based booking, the dynamic generation approach is the better fit.
-
-A dedicated slot table should only be introduced later if the business grows to require slot-level management, auditing, or manual intervention.
+This is the cleanest version of the hybrid model the app is converging toward.
