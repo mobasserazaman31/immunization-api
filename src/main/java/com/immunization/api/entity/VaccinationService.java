@@ -28,9 +28,8 @@ public class VaccinationService {
     @Column(nullable = false)
     private boolean active = true;
 
-    VaccinationService(String name, String description, boolean active) {
+    public VaccinationService(String name, String description) {
         this.name = name;
         this.description = description;
-        this.active = active;
     }
 }

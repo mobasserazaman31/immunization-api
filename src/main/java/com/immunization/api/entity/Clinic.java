@@ -34,12 +34,11 @@ public class Clinic {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
-    Clinic(String name, String address, String city, String province, boolean active) {
+    public Clinic(String name, String address, String city, String province) {
         this.name = name;
         this.address = address;
         this.city = city;
         this.province = province;
-        this.active = active;
     }
 
 

@@ -10,7 +10,6 @@ import org.springframework.web.server.ResponseStatusException;
 import com.immunization.api.dto.OverrideRequest;
 import com.immunization.api.entity.Clinic;
 import com.immunization.api.entity.SlotOverride;
-import com.immunization.api.repository.SlotRepository;
 import java.time.LocalDate;
 
 @Service
@@ -18,40 +17,32 @@ public class SlotOverrideService {
 
     private final SlotOverrideRepository slotOverrideRepository;
     private final ClinicRepository clinicRepository;
-    private final SlotRepository slotRepository;
+    private final SlotGenerationService slotGenerationService;
 
     SlotOverrideService(
             SlotOverrideRepository slotOverrideRepository,
             ClinicRepository clinicRepository,
-            SlotRepository slotRepository) {
+            SlotGenerationService slotGenerationService) {
         this.slotOverrideRepository = slotOverrideRepository;
         this.clinicRepository = clinicRepository;
-        this.slotRepository = slotRepository;
+        this.slotGenerationService = slotGenerationService;
     }
 
     @Transactional
     public SlotOverride createOverride(OverrideRequest overrideRequest) {
-        LocalDate latestAllowedDate = LocalDate.now().plusDays(SlotGenerationService.WINDOW_DAYS);
-        if (overrideRequest.date() == null || !overrideRequest.date().isAfter(latestAllowedDate)) {
+        if (overrideRequest.date() == null || !overrideRequest.date().isAfter(LocalDate.now())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Overrides must be created more than 7 days in advance");
+                "Overrides can only be created for a future date");
         }
 
-        Clinic clinic = clinicRepository.findById(overrideRequest.clinicId())
+        Long clinicId = overrideRequest.clinicId();
+        Clinic clinic = (clinicId == null ? java.util.Optional.<Clinic>empty() : clinicRepository.findById(clinicId))
                 .orElseThrow(() -> new IllegalArgumentException("Clinic not found"));
 
-        LocalDate date = overrideRequest.date();
-        if (slotRepository.existsByClinic_IdAndStartTimeGreaterThanEqualAndStartTimeLessThan(
-                clinic.getId(),
-                date.atStartOfDay(),
-                date.plusDays(1).atStartOfDay())) {
-                throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Slots have already been generated for the override date");
-        }
-
-        SlotOverride slotOverride = new SlotOverride();
+        SlotOverride slotOverride = slotOverrideRepository
+            .findByClinicIdAndOverrideDate(clinic.getId(), overrideRequest.date())
+            .orElseGet(SlotOverride::new);
         slotOverride.setClinic(clinic);
         slotOverride.setOverrideDate(overrideRequest.date());
         slotOverride.setClosed(overrideRequest.closed());
@@ -59,6 +50,8 @@ public class SlotOverrideService {
         slotOverride.setEndTime(overrideRequest.endTime());
         slotOverride.setReason(overrideRequest.reason());
         slotOverride.setCapacity(overrideRequest.capacity());
-        return slotOverrideRepository.save(slotOverride);
+        SlotOverride savedOverride = slotOverrideRepository.save(slotOverride);
+        slotGenerationService.regenerateDate(clinic.getId(), overrideRequest.date());
+        return savedOverride;
     }
 }

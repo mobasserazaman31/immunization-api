@@ -28,6 +28,14 @@ public interface SlotRepository extends JpaRepository<Slot, Long> {
             LocalDateTime startInclusive,
             LocalDateTime endExclusive);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select slot from Slot slot where slot.clinic.id = :clinicId "
+            + "and slot.startTime >= :startInclusive and slot.startTime < :endExclusive")
+    List<Slot> findForUpdateByClinicAndStartTimeRange(
+            @Param("clinicId") Long clinicId,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive);
+
     @Modifying
     @Query(value = """
             INSERT INTO slots (clinic_id, start_time, end_time, capacity, booked_count, status, active)

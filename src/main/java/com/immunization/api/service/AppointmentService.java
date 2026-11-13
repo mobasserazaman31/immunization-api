@@ -18,6 +18,7 @@ import com.immunization.api.entity.Slot;
 import com.immunization.api.entity.SlotStatus;
 import com.immunization.api.entity.VaccinationService;
 import com.immunization.api.repository.AppointmentRepository;
+import com.immunization.api.repository.ClinicRepository;
 import com.immunization.api.repository.SlotRepository;
 import com.immunization.api.repository.VaccinationServiceRepository;
 
@@ -27,17 +28,23 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor 
 public class AppointmentService {
 
+    private final ClinicRepository clinicRepository;
     private final VaccinationServiceRepository vaccinationServiceRepository;
     private final AppointmentRepository appointmentRepository;
         private final SlotRepository slotRepository;
 
         @Transactional
     public Appointment createAppointment(AppointmentRequest appointmentRequest) {
+            Long clinicId = appointmentRequest.clinicId();
+            if (clinicId == null || !clinicRepository.existsById(clinicId)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Clinic not found");
+            }
+
         VaccinationService service = vaccinationServiceRepository.findById(appointmentRequest.serviceId())
                 .orElseThrow(() -> new IllegalArgumentException("Vaccination service not found"));
 
         LocalDateTime requestedStart = appointmentRequest.startTime();
-        Slot slot = slotRepository.findForUpdate(appointmentRequest.clinicId(), requestedStart)
+            Slot slot = slotRepository.findForUpdate(clinicId, requestedStart)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Requested slot is unavailable"));
 
         if (!slot.isActive()
@@ -72,15 +79,17 @@ public class AppointmentService {
 
         Optional<Appointment> appointmentOpt = appointmentRepository.findByBookingReferenceAndPatientDateOfBirth(bookingReference, dateOfBirth);
         if (appointmentOpt.isPresent()) {
-            Appointment appointment = appointmentOpt.get();
+            Appointment appointmentReference = appointmentOpt.get();
+            Slot slot = slotRepository.findForUpdate(
+                    appointmentReference.getClinic().getId(),
+                    appointmentReference.getStartTime())
+                .orElseThrow(() -> new IllegalStateException("Appointment slot not found"));
+            Appointment appointment = appointmentRepository.findByIdForUpdate(appointmentReference.getId())
+                .orElseThrow(() -> new IllegalStateException("Appointment not found"));
             if (appointment.getStatus() != AppointmentStatus.BOOKED) {
                 return true;
             }
 
-            Slot slot = slotRepository.findForUpdate(
-                            appointment.getClinic().getId(),
-                            appointment.getStartTime())
-                    .orElseThrow(() -> new IllegalStateException("Appointment slot not found"));
             appointment.setStatus(AppointmentStatus.CANCELLED);
             slot.setBookedCount(Math.max(0, slot.getBookedCount() - 1));
             slot.setStatus(slot.getBookedCount() >= slot.getCapacity()
