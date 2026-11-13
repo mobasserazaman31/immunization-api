@@ -7,12 +7,12 @@ The app is moving toward a persisted, rolling window of concrete slots instead o
 ### What still needs to change
 
 1. Make the startup job bootstrap-only
-   - The startup path should seed the initial rolling window once.
-   - It should not be used to re-generate the full future window repeatedly.
+   - [x] The startup path should seed the initial rolling window once.
+   - [x] It should not be used to re-generate the full future window repeatedly.
    - The goal is:
-     - startup: seed the current window
-     - daily job: add only the next day
-     - no full-window rebuild during normal operation
+     - [x] startup: seed the current window
+     - [x] daily job: add only the next day
+     - [x] no full-window rebuild during normal operation
 
 2. Remove full-window regeneration from the normal flow
    - Current generation entry points include:
@@ -20,9 +20,9 @@ The app is moving toward a persisted, rolling window of concrete slots instead o
      - `generateNewRollingDay()`
      - `regenerateDate(...)`
    - For production stability, keep only:
-     - initial bootstrap
-     - forward-only daily generation
-     - explicit admin-triggered single-date regeneration when required
+     - [x] initial bootstrap
+     - [x] forward-only daily generation
+     - [x] explicit admin-triggered single-date regeneration when required
 
 3. Treat templates and overrides as the source of truth, not the slot table
    - Concrete slot rows should be materialized from:
