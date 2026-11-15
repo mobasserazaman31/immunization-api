@@ -1,91 +1,54 @@
-# Immunization API
+# Immunization API Endpoint Flows
 
-## Hybrid rolling-slot model: change list
+## Security
 
-The app is moving toward a persisted, rolling window of concrete slots instead of calculating availability dynamically on each booking request. This is the recommended model for routine immunization and similar recurring schedules.
+The security filter permits requests globally, while selected controller methods add method-level authorization. Endpoints marked **ADMIN** require the `ADMIN` role from the Keycloak token. The user profile endpoint requires an authenticated token. Other endpoints have no controller-level role requirement.
 
-### What still needs to change
+## Appointments
 
-1. Make the startup job bootstrap-only
-   - [x] The startup path should seed the initial rolling window once.
-   - [x] It should not be used to re-generate the full future window repeatedly.
-   - The goal is:
-     - [x] startup: seed the current window
-     - [x] daily job: add only the next day
-     - [x] no full-window rebuild during normal operation
+| Method and endpoint | Access | Actions |
+| --- | --- | --- |
+| `POST /api/appointments` | Public | Validates the clinic, vaccination service, and requested slot. Locks the slot, checks availability, increments its booked count, updates its status, creates an appointment and booking reference, and returns the appointment. |
+| `GET /api/appointments` | Public | Returns all appointments. |
+| `POST /api/appointments/cancel?bookingReference={uuid}&dateOfBirth={date}` | Public | Finds the appointment using its booking reference and date of birth. If it is still booked, marks it cancelled, decrements the slot's booked count, updates slot availability, and returns `204`. Returns `404` if no appointment matches. |
 
-2. Remove full-window regeneration from the normal flow
-   - Current generation entry points include:
-     - `populateRollingWindow()`
-     - `generateNewRollingDay()`
-     - `regenerateDate(...)`
-   - For production stability, keep only:
-     - [x] initial bootstrap
-     - [x] forward-only daily generation
-     - [x] explicit admin-triggered single-date regeneration when required
+## Clinics
 
-3. Treat templates and overrides as the source of truth, not the slot table
-   - Concrete slot rows should be materialized from:
-     - active clinic template
-     - valid date window
-     - override for that specific date
-   - The slot table should be the bookable inventory, not the place where the business rules are recalculated each time.
+| Method and endpoint | Access | Actions |
+| --- | --- | --- |
+| `GET /api/clinics` | Public | Returns all clinics. |
+| `POST /api/clinics` | **ADMIN** | Validates the request, creates a clinic, and returns it with `201`. |
 
-4. Enforce `validFrom` and `validTill` as required business rules
-   - `validFrom` must not be null.
-   - `validTill` must not be null.
-   - `validTill` must be greater than or equal to `validFrom`.
-   - Templates outside their validity window should not generate slots.
+## Vaccination Services
 
-5. Keep slot generation idempotent
-   - The app should not create duplicate slot rows for the same clinic, date, and time.
-   - The current insert-if-absent pattern is the right approach.
-   - Every generation path should go through the same slot creation logic to avoid overlap and duplication.
+| Method and endpoint | Access | Actions |
+| --- | --- | --- |
+| `GET /api/vaccination-services` | Public | Returns all vaccination services. |
+| `POST /api/vaccination-services` | **ADMIN** | Validates the request, creates a vaccination service, and returns it with `201`. |
 
-6. Handle overrides explicitly
-   - For date-level overrides, the rules should be explicit:
-     - closed date => no slots generated
-     - reduced capacity => only that slot capacity changes
-     - changed time window => regenerate only that date
-   - Override logic must also reconcile bookings when capacity drops or the day is closed.
+## Appointment Slots and Templates
 
-7. Define the policy for removed or invalidated slots
-   - This remains a business decision.
-   - Options include:
-     - deactivate slot rows instead of deleting them
-     - delete slot rows and cancel associated booked appointments
-     - leave history but mark slots inactive
-   - The chosen policy should be deterministic and easy to support.
+| Method and endpoint | Access | Actions |
+| --- | --- | --- |
+| `GET /api/appointment-slots?clinicId={id}` | Public | Returns active, available slots for the clinic within the current seven-day window, grouped by date. |
+| `GET /api/appointment-slots/templates?clinicId={id}` | Public | Returns active, non-expired templates for the clinic. |
+| `POST /api/appointment-slots/templates` | **ADMIN** | Validates the template, rejects same-priority overlaps and a first applicable date of today, then saves it. It regenerates matching dates that are already materialized and fall within both the template's validity range and the current seven-day window. Reconciliation may cancel bookings that no longer fit; those cancellations are logged. The `201` response includes `affectedBookingCount`. |
+| `PATCH /api/appointment-slots/templates/{templateId}/deactivate` | **ADMIN** | Marks the template inactive, then regenerates its matching dates in the current window and validity period. Any bookings that no longer fit are cancelled and logged. Returns `204`. |
 
-8. Keep booking logic based on slot stock
-   - Booking should rely on concrete slot capacity and booked count.
-   - It should not re-aggregate the template logic each time.
-   - This reduces race conditions and keeps availability aligned with the materialized data.
+## Slot Overrides
 
-9. Keep the daily job narrow and predictable
-   - Best pattern:
-     - bootstrap window = current date + 7 days
-     - daily job = generate exactly one new future date
-     - never regenerate the whole window unless an admin explicitly requests it
-   - This is the standard airline-style scheduling pattern: recurring template + materialized future dates.
+| Method and endpoint | Access | Actions |
+| --- | --- | --- |
+| `GET /api/overrides` | Public | Returns all overrides, including inactive overrides. |
+| `POST /api/overrides` | **ADMIN** | Requires a future date. Creates or updates the override for the clinic and date, marks it active, then regenerates that date. Reconciliation may cancel and log bookings that no longer fit. Returns the saved override with `201`. |
+| `DELETE /api/overrides/{overrideId}` | **ADMIN** | Marks the override inactive, then regenerates the date using the remaining active override or recurring template. Bookings that no longer fit are cancelled and logged. Returns `204`; cancelling an already inactive override is a no-op. |
 
-10. Add clear admin-only control for templates and overrides
-   - Template creation should require admin permissions.
-   - Override creation/update should also require admin control or explicit ownership rules.
-   - The API should clearly separate:
-     - public slot browsing
-     - authenticated booking
-     - admin schedule management
+## User Profile
 
-### Recommended final pattern
+| Method and endpoint | Access | Actions |
+| --- | --- | --- |
+| `GET /` | Authenticated | Reads the authenticated user's subject and `preferred_username` claims, logs them, and returns the profile. |
 
-The best model for routine immunization or airline-like scheduling is:
+## Scheduled Slot Generation
 
-- Templates define the recurring weekly pattern.
-- Validity windows restrict when the template is active.
-- Overrides change a specific date.
-- Concrete slot rows are generated and stored for a rolling future window.
-- A daily job extends the window by one more day.
-- Booking logic reads the persisted slot capacity, not the template.
-
-This is the cleanest version of the hybrid model the app is converging toward.
+The endpoint flows above work with materialized slot rows. At application startup, a one-time initializer populates the initial rolling window. A daily job generates the new edge date of the seven-day window. Template and override mutations can also regenerate dates immediately as described above.
