@@ -50,8 +50,23 @@ public class SlotOverrideService {
         slotOverride.setEndTime(overrideRequest.endTime());
         slotOverride.setReason(overrideRequest.reason());
         slotOverride.setCapacity(overrideRequest.capacity());
+        slotOverride.setActive(true);
         SlotOverride savedOverride = slotOverrideRepository.save(slotOverride);
         slotGenerationService.regenerateDate(clinic.getId(), overrideRequest.date());
         return savedOverride;
+    }
+
+    @Transactional
+    public void cancelOverride(Long overrideId) {
+        SlotOverride override = slotOverrideRepository.findById(overrideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot override not found"));
+
+        if (!override.isActive()) {
+            return;
+        }
+
+        override.setActive(false);
+        slotOverrideRepository.saveAndFlush(override);
+        slotGenerationService.regenerateDate(override.getClinic().getId(), override.getOverrideDate());
     }
 }

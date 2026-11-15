@@ -16,7 +16,7 @@ public interface SlotOverrideRepository
         LocalDate overrideDate
     );
 
-    List<SlotOverride> findByClinicIdAndOverrideDateBetween(
+    List<SlotOverride> findByClinicIdAndActiveTrueAndOverrideDateBetween(
         Long clinicId,
         LocalDate startDate,
         LocalDate endDate

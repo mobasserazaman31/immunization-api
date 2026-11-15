@@ -3,10 +3,11 @@ package com.immunization.api.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,7 @@ import com.immunization.api.repository.ClinicRepository;
 import com.immunization.api.repository.SlotRepository;
 import com.immunization.api.repository.SlotOverrideRepository;
 import com.immunization.api.repository.SlotTemplateRepository;
-
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -71,66 +72,115 @@ public class SlotGenerationService {
             LocalDate lastDate,
             boolean updateExisting) {
         Long clinicId = clinic.getId();
-        Map<java.time.DayOfWeek, SlotTemplate> templates = templateRepository
-                .findByClinicIdAndActiveTrue(clinicId)
-                .stream()
-                .collect(Collectors.toMap(SlotTemplate::getDayOfWeek, Function.identity()));
-        Map<LocalDate, SlotOverride> overrides = overrideRepository
-                .findByClinicIdAndOverrideDateBetween(clinicId, firstDate, lastDate)
-                .stream()
-                .collect(Collectors.toMap(SlotOverride::getOverrideDate, Function.identity()));
+        List<SlotTemplate> templates = loadActiveTemplates(clinicId);
+        Map<LocalDate, SlotOverride> overrides = loadOverrides(clinicId, firstDate, lastDate);
 
         for (LocalDate date = firstDate; !date.isAfter(lastDate); date = date.plusDays(1)) {
             SlotOverride override = overrides.get(date);
-            SlotTemplate template = templates.get(date.getDayOfWeek());
-            boolean closed = override != null && override.isClosed();
-            String start = closed ? null : override != null ? override.getStartTime()
-                    : template != null ? template.getStartTime() : null;
-            String end = closed ? null : override != null ? override.getEndTime()
-                    : template != null ? template.getEndTime() : null;
-            Map<LocalDateTime, Integer> desiredSlots = new HashMap<>();
-
-            if (start != null && end != null) {
-                int capacity = override != null ? override.getCapacity() : template.getCapacity();
-                LocalTime openingTime = LocalTime.parse(start);
-                LocalTime closingTime = LocalTime.parse(end);
-                for (LocalTime time = openingTime;
-                        !time.plusMinutes(SLOT_DURATION_MINUTES).isAfter(closingTime);
-                        time = time.plusMinutes(SLOT_DURATION_MINUTES)) {
-                    desiredSlots.put(LocalDateTime.of(date, time), capacity);
-                }
-            }
+            SlotTemplate template = resolveEffectiveTemplate(date, templates);
+            Map<LocalDateTime, Integer> desiredSlots = buildDaySchedule(date, override, template);
 
             if (updateExisting) {
-                LocalDateTime dayStart = date.atStartOfDay();
-                LocalDateTime dayEnd = date.plusDays(1).atStartOfDay();
-                for (Slot slot : slotRepository.findForUpdateByClinicAndStartTimeRange(
-                        clinicId,
-                        dayStart,
-                        dayEnd)) {
-                    Integer capacity = desiredSlots.remove(slot.getStartTime());
-                    if (capacity == null) {
-                        cancelInvalidBookings(slot, 0, date, override);
-                        slot.setActive(false);
-                        slot.setBookedCount(0);
-                        slot.setStatus(SlotStatus.AVAILABLE);
-                    } else {
-                        int bookedCount = cancelInvalidBookings(slot, capacity, date, override);
-                        slot.setEndTime(slot.getStartTime().plusMinutes(SLOT_DURATION_MINUTES));
-                        slot.setCapacity(capacity);
-                        slot.setBookedCount(bookedCount);
-                        slot.setStatus(bookedCount == capacity ? SlotStatus.BOOKED : SlotStatus.AVAILABLE);
-                        slot.setActive(true);
-                    }
-                }
+                syncExistingDaySlots(clinicId, date, desiredSlots, override);
             }
 
-            desiredSlots.forEach((slotStart, capacity) -> slotRepository.insertIfAbsent(
-                    clinicId,
-                    slotStart,
-                    slotStart.plusMinutes(SLOT_DURATION_MINUTES),
-                    capacity));
+            insertNewDaySlots(clinicId, desiredSlots);
         }
+    }
+
+    private List<SlotTemplate> loadActiveTemplates(Long clinicId) {
+        return templateRepository.findByClinicIdAndActiveTrue(clinicId);
+    }
+
+    private Map<LocalDate, SlotOverride> loadOverrides(Long clinicId, LocalDate firstDate, LocalDate lastDate) {
+        return overrideRepository.findByClinicIdAndActiveTrueAndOverrideDateBetween(clinicId, firstDate, lastDate)
+                .stream()
+                .collect(Collectors.toMap(SlotOverride::getOverrideDate, Function.identity()));
+    }
+
+    private SlotTemplate resolveEffectiveTemplate(LocalDate date, List<SlotTemplate> templates) {
+        return templates.stream()
+                .filter(template -> template.getDayOfWeek() == date.getDayOfWeek())
+                .filter(template -> isValidOn(template, date))
+                .sorted(Comparator
+                        .comparingInt((SlotTemplate template) -> template.getPriority().getPrecedence())
+                        .reversed())
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Map<LocalDateTime, Integer> buildDaySchedule(
+            LocalDate date,
+            SlotOverride override,
+            SlotTemplate template) {
+        boolean closed = override != null && override.isClosed();
+        String start = null;
+        String end = null;
+
+        if (!closed) {
+            if (override != null) {
+                start = override.getStartTime();
+                end = override.getEndTime();
+            } else if (template != null) {
+                start = template.getStartTime();
+                end = template.getEndTime();
+            }
+        }
+
+        Map<LocalDateTime, Integer> desiredSlots = new HashMap<>();
+        if (start == null || end == null) {
+            return desiredSlots;
+        }
+
+        int capacity = override != null ? override.getCapacity() : template.getCapacity();
+        LocalTime openingTime = LocalTime.parse(start);
+        LocalTime closingTime = LocalTime.parse(end);
+
+        for (LocalTime time = openingTime; !time.plusMinutes(SLOT_DURATION_MINUTES).isAfter(closingTime); time = time
+                .plusMinutes(SLOT_DURATION_MINUTES)) {
+            desiredSlots.put(LocalDateTime.of(date, time), capacity);
+        }
+
+        return desiredSlots;
+    }
+
+    private void syncExistingDaySlots(
+            Long clinicId,
+            LocalDate date,
+            Map<LocalDateTime, Integer> desiredSlots,
+            SlotOverride override) {
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd = date.plusDays(1).atStartOfDay();
+
+        for (Slot slot : slotRepository.findForUpdateByClinicAndStartTimeRange(clinicId, dayStart, dayEnd)) {
+            Integer capacity = desiredSlots.remove(slot.getStartTime());
+            if (capacity == null) {
+                cancelInvalidBookings(slot, 0, date, override);
+                slot.setActive(false);
+                slot.setBookedCount(0);
+                slot.setStatus(SlotStatus.AVAILABLE);
+            } else {
+                int bookedCount = cancelInvalidBookings(slot, capacity, date, override);
+                slot.setEndTime(slot.getStartTime().plusMinutes(SLOT_DURATION_MINUTES));
+                slot.setCapacity(capacity);
+                slot.setBookedCount(bookedCount);
+                slot.setStatus(bookedCount == capacity ? SlotStatus.BOOKED : SlotStatus.AVAILABLE);
+                slot.setActive(true);
+            }
+        }
+    }
+
+    private void insertNewDaySlots(Long clinicId, Map<LocalDateTime, Integer> desiredSlots) {
+        desiredSlots.forEach((slotStart, capacity) -> slotRepository.insertIfAbsent(
+                clinicId,
+                slotStart,
+                slotStart.plusMinutes(SLOT_DURATION_MINUTES),
+                capacity));
+    }
+
+    private boolean isValidOn(SlotTemplate template, LocalDate date) {
+        return (template.getValidFrom() == null || !date.isBefore(template.getValidFrom()))
+                && (template.getValidTill() == null || !date.isAfter(template.getValidTill()));
     }
 
     private int cancelInvalidBookings(Slot slot, int maximumBookings, LocalDate date, SlotOverride override) {

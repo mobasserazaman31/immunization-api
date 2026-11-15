@@ -1,7 +1,7 @@
 package com.immunization.api.entity;
 
 import java.time.DayOfWeek;
-import java.time.LocalTime;
+import java.time.LocalDate;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,13 +14,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity 
-@Table (name = "slot_templates",  uniqueConstraints = @UniqueConstraint(columnNames = {"clinic_id", "day_of_week"}))
+@Table(name = "slot_templates")
 @Getter  
 @Setter 
 @NoArgsConstructor 
@@ -44,8 +43,18 @@ public class SlotTemplate {
     @Column (name = "end_time", nullable = false)
     private String endTime;
 
+    @Column(name = "valid_from", nullable = false)
+    private LocalDate validFrom;
+
+    @Column(name = "valid_till", nullable = false)
+    private LocalDate validTill;
+
     @Column (name = "capacity", nullable = false)
     private int capacity;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false, length = 20)
+    private SlotTemplatePriority priority = SlotTemplatePriority.DEFAULT;
 
     private boolean active = true;
 

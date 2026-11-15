@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
 
 @Entity
 @Table(
@@ -44,5 +43,7 @@ public class SlotOverride {
     @Column (name = "capacity", nullable = false)
     private int capacity;
 
-  
+    @Column(name = "active", nullable = false)
+    private boolean active = true;
+
 } 

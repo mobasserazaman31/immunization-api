@@ -48,6 +48,10 @@ public class SlotService {
     }
 
     public List<SlotTemplate> getSlotTemplates(Long clinicId) {
-        return templateRepository.findByClinicIdAndActiveTrue(clinicId);
+        LocalDate today = LocalDate.now();
+        return templateRepository.findByClinicIdAndActiveTrue(clinicId).stream()
+            .filter(template -> template.getValidTill() == null
+                || !today.isAfter(template.getValidTill()))
+            .toList();
     }
 }
