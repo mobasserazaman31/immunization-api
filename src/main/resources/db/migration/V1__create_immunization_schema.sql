@@ -35,7 +35,7 @@ CREATE TABLE slot_templates (
         day_of_week WITH =,
         priority WITH =,
         daterange(valid_from, valid_till, '[]') WITH &&
-    )
+    ) WHERE (active)
 );
 
 CREATE TABLE slot_overrides (
@@ -79,6 +79,7 @@ CREATE TABLE appointments (
     patient_first_name VARCHAR(100) NOT NULL,
     patient_last_name VARCHAR(100) NOT NULL,
     patient_date_of_birth DATE NOT NULL,
+    patient_ohip_number VARCHAR(12) NOT NULL,
 
     guardian_name VARCHAR(200) NOT NULL,
     guardian_email VARCHAR(254) NOT NULL,
@@ -111,6 +112,10 @@ CREATE INDEX idx_appointments_slot
 
 CREATE INDEX idx_appointments_guardian_email
     ON appointments(guardian_email);
+
+CREATE UNIQUE INDEX uq_appointments_patient_service_booked
+    ON appointments(patient_ohip_number, service_id)
+    WHERE status = 'BOOKED';
 
 INSERT INTO vaccination_services (name, description, active) VALUES
 ('2-Month Routine Immunizations', 'Includes DTaP-IPV-Hib (Diphtheria, tetanus, pertussis, polio, Hib) needle, Pneu-C (Pneumococcal conjugate) needle, and Rot-1 (Rotavirus) oral drops.', TRUE),

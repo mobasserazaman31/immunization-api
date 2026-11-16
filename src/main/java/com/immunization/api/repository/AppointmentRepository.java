@@ -13,7 +13,18 @@ import com.immunization.api.entity.Appointment;
 import com.immunization.api.entity.AppointmentStatus;
 import jakarta.persistence.LockModeType;
 
-public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
+public interface AppointmentRepository extends JpaRepository<Appointment, Long>, AppointmentRepositoryCustom {
+
+        boolean existsByPatientOhipNumberIgnoreCaseAndService_IdAndStatus(
+            String patientOhipNumber,
+            Long serviceId,
+            AppointmentStatus status);
+
+        boolean existsByPatientOhipNumberIgnoreCaseAndStatusAndSlot_StartTimeLessThanAndSlot_EndTimeGreaterThan(
+            String patientOhipNumber,
+            AppointmentStatus status,
+            java.time.LocalDateTime requestedEnd,
+            java.time.LocalDateTime requestedStart);
 
         Optional<Appointment> findByBookingReferenceAndPatientDateOfBirth(
             java.util.UUID bookingReference,

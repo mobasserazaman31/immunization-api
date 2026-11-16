@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.UUID;
 import java.time.LocalDate;
@@ -54,6 +55,10 @@ public class Appointment {
     @Column(name = "patient_date_of_birth", nullable = false)
     private LocalDate patientDateOfBirth;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Column(name = "patient_ohip_number", nullable = false, length = 12)
+    private String patientOhipNumber;
+
     @Column(name = "guardian_name", nullable = false)
     private String guardianName;
 
@@ -88,6 +93,7 @@ public class Appointment {
             String patientFirstName,
             String patientLastName,
             LocalDate patientDateOfBirth,
+            String patientOhipNumber,
             String guardianName,
             String guardianEmail,
             String guardianPhone,
@@ -98,6 +104,7 @@ public class Appointment {
         this.patientFirstName = patientFirstName;
         this.patientLastName = patientLastName;
         this.patientDateOfBirth = patientDateOfBirth;
+        this.patientOhipNumber = patientOhipNumber;
         this.guardianName = guardianName;
         this.guardianEmail = guardianEmail;
         this.guardianPhone = guardianPhone;

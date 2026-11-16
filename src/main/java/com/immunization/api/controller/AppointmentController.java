@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.validation.Valid;
 import com.immunization.api.dto.AppointmentRequest;
 import com.immunization.api.entity.Appointment;
 import com.immunization.api.service.AppointmentService;
@@ -29,7 +30,7 @@ public class AppointmentController {
     }
 
     @PostMapping
-    public ResponseEntity<Appointment> createAppointment(@RequestBody AppointmentRequest appointmentRequest) {
+    public ResponseEntity<Appointment> createAppointment(@Valid @RequestBody AppointmentRequest appointmentRequest) {
         Appointment created = appointmentService.createAppointment(appointmentRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
